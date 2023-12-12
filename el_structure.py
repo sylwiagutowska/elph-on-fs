@@ -116,3 +116,32 @@ class el_structure():
   h=open('eldos.dat','w')
   for i in DOS:
    h.write("{:.4} {:.6}\n".format(*i))
+
+
+ def read_dense_ene(self):
+  h=open(self.tmp_dir+'/'+self.prefix+'.a2Fsave')
+  tmp=[i.split() for i in h.readlines()]
+  h.close()
+  self.ENE_dense=[]
+  KPOINTS=[]
+  WK=[]
+
+  [nbnd_dense,nk_dense]=[int(m) for m in tmp[0]]
+  for nl,line in enumerate(tmp[1:]):
+   for m in line:
+    self.ENE_dense.append(float(m))
+   if len(self.ENE_dense)==nbnd_dense*nk_dense:
+    break
+  print(self.ef)
+  self.ENE_dense=(np.array(self.ENE_dense).reshape((nk_dense,nbnd_dense)).transpose()-self.ef*hartree2ry) #*hartree2ry
+  self.ENE_fs_dense=self.ENE_dense[self.minband:self.maxband+1]#np.transpose(np.array(ENE2)) #ENE=[] #ENE[i][j] , i - no of band, j-no of kpoint
+
+  for nl2,line in enumerate(tmp[2+nl:]): 
+    KPOINTS.append([float(m) for m in line]+[nl2])
+    if len(KPOINTS)==nk_dense: break
+  for nl3,line in enumerate(tmp[3+nl+nl2:]): 
+    for m in line:
+     WK.append(float(m))
+    if len(WK)==nk_dense: break
+  nk_dense=[int(m) for m in tmp[4+nl+nl2+nl3]]  
+  return KPOINTS,WK,nk_dense

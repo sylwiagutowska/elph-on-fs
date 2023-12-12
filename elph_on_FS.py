@@ -41,13 +41,28 @@ el_structure.read_el_structure()
 #el_structure.calc_dos(sstructure)
 #el_structure.find_ef()
 #exit()
+
+KPOINTS,WK,nk_dense=el_structure.read_dense_ene()
+#el_structure.find_ef()
+structure_dense=copy.deepcopy(sstructure)
+structure_dense.NONEQ=KPOINTS
+structure_dense.calc_noneq_cryst()
+structure_dense.no_of_kpoints=nk_dense
+structure_dense.make_kgrid()
+sstructure.allk_dense=structure_dense.allk
+sstructure.allk_dense_in_crystal_coordinates=structure_dense.allk_in_crystal_coordinates
+
+print(len(sstructure.allk_dense),el_structure.ENE_fs_dense.shape)
+#print(structure_dense.allk_in_crystal_coordinates)
 phh_structure=ph_structure.ph_structure(sstructure)
 phh_structure.read_ph_structure()
 #ph_structure.check_symm_of_q(structure)
-
-
+print(phh_structure.multiplicity_of_qs)
+print(np.array(el_structure.ENE_dense)[:,0])
+print(np.array(el_structure.ENE)[:,0])
 #print(phh_structure.PATT[1])
 basic_structure=sstructure
+#print(max([m[3] for m in sstructure.allk_dense]))
 
 
  #check if composing dynmat works - WORKS! GIVES PROPER omega^2
@@ -71,6 +86,7 @@ for qno in range(len(phh_structure.Q)):
  structure_new.calc_irt()
 #print(len(structure_new.SYMM))
 # print(phh_structure.DYN2[qno],np.sum(phh_structure.DYN2[qno],axis=0))
+
 
  dyn=ph_structure.symmetrize(phh_structure.nat,np.array(phh_structure.PATT[qno]),
      (phh_structure.DYN2[qno]), sstructure.at,sstructure.e,
@@ -154,8 +170,6 @@ for ni,i in enumerate(jedynki):
 
 
 elphh_structure=elph_structure.elph_structure(phh_structure,'lambda')
-
-
 
 '''
 for q in range(1,len(ph_structure.Q)+1):

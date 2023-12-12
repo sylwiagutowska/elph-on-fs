@@ -211,27 +211,88 @@ class elph_structure_single_q():
   ELPH2=np.zeros(shape=(phh_structure.no_of_modes,phh_structure.no_of_modes), dtype=complex) #stores elph[k][ibnd][jbnd][nmode]
 
   for iband in range(self.fermi_nbnd_el):
-  #  ELPH2=np.zeros(shape=(len(structure.NONEQ),phh_structure.no_of_modes,phh_structure.no_of_modes), dtype=complex) #stores elph[k][ibnd][jbnd][nmode]
     for numk, k in enumerate(self.KPOINTS): 
-     weight0=el_structure.w0gauss(-ell_structure.ENE_fs[iband][k[4]]) *self.WEIGHTS_OF_K[numk]
      for jband in range(self.fermi_nbnd_el):
-      weight=weight0*el_structure.w0gauss(-ell_structure.ENE_fs[jband][self.KPQ[numk][2]]) #*self.WEIGHTS_OF_K[self.KPQ[numk][1]]
-      #sumweight+=weight
+      weight=el_structure.w0gauss(-ell_structure.ENE_fs[jband][self.KPQ[numk][2]]) #*weight0 #*self.WEIGHTS_OF_K[self.KPQ[numk][1]]
       for iipert in range(phh_structure.no_of_modes):
        for jjpert in range(phh_structure.no_of_modes):
-        ELPH2[iipert][jjpert]=np.conjugate(self.ELPH[iband][jband][numk][jjpert])*self.ELPH[iband][jband][numk][iipert] *weight 
+        ELPH2[iipert][jjpert]=np.conjugate(self.ELPH[iband][jband][numk][jjpert])*self.ELPH[iband][jband][numk][iipert] 
      
       ELPH2 =ph_structure.symmetrize(phh_structure.nat,np.array(phh_structure.PATT[self.q_no-1]),
 ELPH2 , structure.at,structure.e, structure.SYMM_crystal, self.SYMM_q,self.irt,self.rtau,phh_structure.Q_crystal[self.q_no-1] )
+      ELPH2=ELPH2*weight 
       for nu in range(phh_structure.no_of_modes):
        for mu in range(phh_structure.no_of_modes):
         for vu in range(phh_structure.no_of_modes): 
           dyn= (phh_structure.DYN[self.q_no-1][0])
           self.ELPH_sum[iband][numk][nu] += (np.conjugate(dyn[mu][nu])*ELPH2[mu][vu]*dyn[vu][nu])    #--indeksy jak w elphon
-       #ELPH2[numk] =ph_structure.symmetrize(phh_structure.nat,np.array(phh_structure.PATT[q_point_no-1]),
-#ELPH2[numk] , structure.at,structure.e, structure.SYMM_crystal, structure.SYMM_crystal,structure.irt,self.rtau,phh_structure.Q_crystal[q_point_no-1] )
-
  
+
+
+ def calc_lambda_summed_over_modes(self,structure,phh_structure,ell_structure,l_or_gep):
+  self.lambda_or_elph=l_or_gep
+  self.COLORS=np.zeros(shape=(self.fermi_nbnd_el, self.nkp),dtype=complex)
+  self.COLORS2=np.zeros(shape=(phh_structure.no_of_modes),dtype=complex)
+  wagi0=[[el_structure.w0gauss(-ell_structure.ENE_fs[jband][k[4]]) for numk,k in enumerate(self.KPOINTS)] for jband in range(self.fermi_nbnd_el) ]
+  wagi=[[wagi0[jband][numk]*self.WEIGHTS_OF_K[numk] for numk in range(len(self.KPOINTS))] for jband in range(self.fermi_nbnd_el) ]
+  sumwag=np.sum(wagi)
+  if ell_structure.soc!=0: sumwag=np.sum(wagi)/2 #devide by 2 because we are suming not averaging over spin
+  if self.lambda_or_elph=='elph':
+   for numk in range(self.nkp):
+    for jband in range(self.fermi_nbnd_el): 
+     self.COLORS[jband][numk]= np.sum(self.ELPH_sum[jband][numk]) #sum over modes)
+  else:
+   for num in range(phh_structure.no_of_modes): #modes
+    if phh_structure.FREQ[self.q_no-1][num]<=20*RY_TO_CM_1: continue
+    for numk in range(self.nkp):
+     for jband in range(self.fermi_nbnd_el): 
+       lam= .5*(self.ELPH_sum[jband][numk][num]) /((phh_structure.FREQ[self.q_no-1][num])**2)
+       self.COLORS[jband][numk]+=lam  
+       self.COLORS2[num]+=lam *wagi[jband][numk]     
+  self.COLORS2=self.COLORS2.real/sumwag
+  self.COLORS2=np.round([self.COLORS2[m] for m in phh_structure.ORDER_OF_IRR[self.q_no-1]],4)
+  print(self.q_no,self.COLORS2,sum(self.COLORS2),'from main program')  
+  lambda_sum0=sum([sum([ self.COLORS[jband][numk]*wagi[jband][numk] for numk in range(len(self.COLORS[jband]))]) for jband in range(len(self.COLORS)) ])
+  print (self.q_no,': lambda_sum=',lambda_sum0/sumwag,'sumwag=',sumwag) #,'dos=',dos)
+  
+ def elph_single_q_in_whole_kgrid(self,structure,phh_structure,ell_structure,l_or_gep):
+  wagi0=[[el_structure.w0gauss(-ell_structure.ENE_fs[jband][k[4]]) for numk,k in enumerate(self.KPOINTS)] for jband in range(self.fermi_nbnd_el) ]
+  wagi=np.array([[ bnd[k[3]] for k in self.KPOINTS_all] for bnd in wagi0])
+  self.COLORS=np.array([[ bnd[k[3]] for k in self.KPOINTS_all] for bnd in self.COLORS])
+  lam=np.sum(self.COLORS*wagi)/np.sum(wagi)
+  print('whole grid gives',lam)
+  h=open('lambda'+str(self.q_no)+'.frmsf','w')
+  h.write(str(structure.no_of_kpoints[0])+' '+str(structure.no_of_kpoints[1])+' ' +str(structure.no_of_kpoints[2])+'\n')
+  h.write('1\n'+str(len(ell_structure.bands_num))+'\n')
+  for i in structure.e:
+   for j in i:
+    h.write(str(j)+' ')
+   h.write('\n')
+  for bnd in ell_structure.ENE_fs:
+   for k in structure.allk:
+    h.write(str(bnd[k[3]])+'\n')
+  for bnd in self.COLORS:
+   for k in bnd:
+    h.write(str(np.abs(k))+'\n')
+  h.close()
+
+
+ def read_lambdas_from_file(self):
+   h=open(self.elph_dir2+'/elph.inp_lambda.'+str(self.q_no))
+   tmp=h.readlines()
+   h.close()
+   m=0
+   self.lambdas_from_file=[]
+   for nj,j in enumerate(tmp):
+    if 'Gaussian' in j: m+=1
+    if m==4:
+     for k in tmp[nj+2:]:
+      if 'Gaussian' in k: break
+      self.lambdas_from_file.append(np.round(float(k.split()[2]),4))
+     break
+
+
+
  def calc_lambda_q_as_elphon_does(self,phh_structure,ell_structure,structure): 
   ELPH2=np.zeros(shape=(phh_structure.no_of_modes,phh_structure.no_of_modes), dtype=complex) #stores elph[k][ibnd][jbnd][nmode]
   self.ELPH_sum2=np.zeros(shape=( phh_structure.no_of_modes),dtype=complex)
@@ -263,68 +324,6 @@ ELPH2 , structure.at,structure.e, structure.SYMM_crystal, self.SYMM_q,self.irt,s
   print('\n',self.q_no,(np.round([lam[m] for m in phh_structure.ORDER_OF_IRR[self.q_no-1]] ,4)),sum(lam),'calc as elphon')
   self.read_lambdas_from_file()
   print(self.q_no,self.lambdas_from_file,sum(self.lambdas_from_file),'from elph_dir')
-
-
- def calc_lambda_summed_over_modes(self,structure,phh_structure,ell_structure,l_or_gep):
-  #print(str(q)+': print elph to file')
-  self.lambda_or_elph=l_or_gep
-  self.COLORS=np.zeros(shape=(self.fermi_nbnd_el, self.nkp),dtype=complex)
-  self.COLORS2=np.zeros(shape=(phh_structure.no_of_modes),dtype=complex)
- # print(max([i[4] for i in self.KPOINTS]),[len(bnd) for bnd in ell_structure.ENE_fs])
-  wagi0=[[el_structure.w0gauss(-ell_structure.ENE_fs[jband][k[4]]) for numk,k in enumerate(self.KPOINTS)] for jband in range(self.fermi_nbnd_el) ]
-  wagi=[[wagi0[jband][numk]*self.WEIGHTS_OF_K[numk] for numk in range(len(self.KPOINTS))] for jband in range(self.fermi_nbnd_el) ]
- # dos=sum([sum(w) for w in wagi])/sum(self.WEIGHTS_OF_K)
-  if self.lambda_or_elph=='elph':
-   for numk in range(self.nkp):
-    for jband in range(self.fermi_nbnd_el): 
-     self.COLORS[jband][numk]= np.sum(self.ELPH_sum[jband][numk]) #sum over modes)
-  else:
-   for num in range(phh_structure.no_of_modes): #modes
-    if phh_structure.FREQ[self.q_no-1][num]<=20*RY_TO_CM_1: continue
-    for numk in range(self.nkp):
-     for jband in range(self.fermi_nbnd_el): 
-       lam= .5*(self.ELPH_sum[jband][numk][num]) /((phh_structure.FREQ[self.q_no-1][num])**2)
-       self.COLORS[jband][numk]+=lam/wagi0[jband][numk] #sum over modes)#*wagi0[jband][numk] #/dos  #abs=sqrt(real^2+im^2)
-       self.COLORS2[num]+=lam #*wagi[jband][numk]     
-  #print('w',phh_structure.FREQ[q-1])
-  self.COLORS2=self.COLORS2.real/np.sum(wagi)
-  self.COLORS2=np.round([self.COLORS2[m] for m in phh_structure.ORDER_OF_IRR[self.q_no-1]],4)
-  print(self.q_no,self.COLORS2,sum(self.COLORS2),'from main program') #*RY_TO_GHZ)
-  lambda_sum0=sum([sum([ self.COLORS[jband][numk]*wagi[jband][numk] for numk in range(len(self.COLORS[jband]))]) for jband in range(len(self.COLORS)) ])
-  print (self.q_no,': lambda_sum=',lambda_sum0/np.sum(wagi)) #,'dos=',dos)
-
- def elph_single_q_in_whole_kgrid(self,structure,phh_structure,ell_structure,l_or_gep):
-  self.COLORS=[[ bnd[k[3]] for k in self.KPOINTS_all] for bnd in self.COLORS]
-  h=open('lambda'+str(self.q_no)+'.frmsf','w')
-  h.write(str(structure.no_of_kpoints[0])+' '+str(structure.no_of_kpoints[1])+' ' +str(structure.no_of_kpoints[2])+'\n')
-  h.write('1\n'+str(len(ell_structure.bands_num))+'\n')
-  for i in structure.e:
-   for j in i:
-    h.write(str(j)+' ')
-   h.write('\n')
-  for bnd in ell_structure.ENE_fs:
-   for k in structure.allk:
-    h.write(str(bnd[k[3]])+'\n')
-  for bnd in self.COLORS:
-   for k in bnd:
-    h.write(str(np.abs(k))+'\n')
-  h.close()
-
- # print (q,":",len(self.COLORS),[len(i) for i in self.COLORS],len(ell_structure.ENE_fs),[len(i) for i in ell_structure.ENE_fs],len(structure.allk))
-
- def read_lambdas_from_file(self):
-   h=open(self.elph_dir2+'/elph.inp_lambda.'+str(self.q_no))
-   tmp=h.readlines()
-   h.close()
-   m=0
-   self.lambdas_from_file=[]
-   for nj,j in enumerate(tmp):
-    if 'Gaussian' in j: m+=1
-    if m==4:
-     for k in tmp[nj+2:]:
-      if 'Gaussian' in k: break
-      self.lambdas_from_file.append(np.round(float(k.split()[2]),4))
-     break
 
 def cond(ind,nk):
  if ind[0]!=-1 and ind[0]!=nk[0] and ind[1]!=-1 and ind[1]!=nk[1] and ind[2]!=-1 and ind[2]!=nk[2]: return True

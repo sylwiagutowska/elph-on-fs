@@ -36,6 +36,7 @@ class elph_structure():
    self.ALL_COLORS=[ i[0] for i in results]
    self.KPOINTS_all_all_q=[ i[1] for i in results]
    self.lambda_from_files_all=[i[2] for i in results]
+   self.ALL_COLORS2=[ i[3] for i in results]
  def single_job(self,args):
   [q,structure,phh_structure,ell_structure,lambda_or_elph]=args
   print('calculations for '+str(q)+'. of total '+str(len(phh_structure.Q))+' q points')
@@ -48,7 +49,7 @@ class elph_structure():
                 phh_structure,ell_structure,lambda_or_elph)  #'lambda' or 'elph')
   elph_q.elph_single_q_in_whole_kgrid(structure,\
                 phh_structure,ell_structure,lambda_or_elph)  #'lambda' or 'elph'
-  return [elph_q.COLORS,elph_q.KPOINTS_all,elph_q.lambdas_from_file]
+  return [elph_q.COLORS,elph_q.KPOINTS_all,elph_q.lambdas_from_file,elph_q.COLORS2]
   print(str(q)+'. point ended')
   
 
@@ -59,46 +60,96 @@ class elph_structure():
   self.SUMMED_COLORS=np.array([[0 for k in range(len(structure.allk))] for jband in range(ell_structure.fermi_nbnd_el)])
   self.SUMMED_COLORS_nq=[[0 for k in range(len(structure.NONEQ))] for jband in range(ell_structure.fermi_nbnd_el)]
 
+  suma=0
+  for numq,col_q in enumerate(self.ALL_COLORS2):
+   suma+=np.sum(col_q)*phh_structure.multiplicity_of_qs[numq]
+  print('first summed over k',suma/sum(phh_structure.multiplicity_of_qs))
+
+  
+
+
+  '''
+  for numq,col_q in enumerate(self.ALL_COLORS):
+   for band in range(0,len(self.SUMMED_COLORS),2):
+    col_q[band]=(col_q[band]+col_q[band+1])/2
+    col_q[band+1]=col_q[band]
+  
+   for band in range(len(self.SUMMED_COLORS)):
+     for numk,k in enumerate(structure.allk):
+      col_q[band][k[3]]+=col_q[band][numk] /structure.WK[k[3]] 
+   for band in range(len(col_q)):
+     for numk,k in enumerate(structure.allk):
+      col_q[band][numk]=col_q[band][k[3]]
+  '''
+
   for band in range(len(self.SUMMED_COLORS)):
    for numk,k in enumerate(structure.allk):
     for numq,col_q in enumerate(self.ALL_COLORS):
-     self.SUMMED_COLORS[band][numk]+=col_q[band][numk] *phh_structure.multiplicity_of_qs[numq]  #*waga #--done for every q
-
-
+     self.SUMMED_COLORS[band][numk]+=col_q[band][numk] *phh_structure.multiplicity_of_qs[numq] #*el_structure.w0gauss(-ell_structure.ENE_fs[band][k[3]]) 
+ 
   #imposing simmetry
   if ell_structure.soc==1:
    for band in range(0,len(self.SUMMED_COLORS),2):
     self.SUMMED_COLORS[band]=(self.SUMMED_COLORS[band]+self.SUMMED_COLORS[band+1])/2
     self.SUMMED_COLORS[band+1]=self.SUMMED_COLORS[band]
-
+  
   for band in range(len(self.SUMMED_COLORS)):
    for numk,k in enumerate(structure.allk):
-     self.SUMMED_COLORS_nq[band][k[3]]+=self.SUMMED_COLORS[band][numk] /structure.WK[k[3]]
-  #self.SUMMED_COLORS=[[0 for k in range(len(structure.allk))] for jband in range(ell_structure.fermi_nbnd_el)]
+     self.SUMMED_COLORS_nq[band][k[3]]+=self.SUMMED_COLORS[band][numk] /structure.WK[k[3]] 
   for band in range(len(self.SUMMED_COLORS)):
    for numk,k in enumerate(structure.allk):
-     self.SUMMED_COLORS[band][numk]=self.SUMMED_COLORS_nq[band][k[3]]
+     self.SUMMED_COLORS[band][numk]=self.SUMMED_COLORS_nq[band][k[3]] #el_structure.w0gauss(-ell_structure.ENE_fs[band][k[3]]) 
  
-  self.SUMMED_COLORS=self.SUMMED_COLORS/2/sum(phh_structure.multiplicity_of_qs) #/sum_wag #divide 2 because of spin
+ 
+  self.SUMMED_COLORS=self.SUMMED_COLORS/sum(phh_structure.multiplicity_of_qs) #/sum_wag #divide 2 because of spin
+  ##verification
   sum_wag=0
-  lamsum=0
-#  h=open('aa.frmsf','w')
-#  h.write("12 12 12\n1\n4\n-1.0 -1.0 1.0\n1.0 1.0 1.0\n-1.0 1.0 -1.0\n")
+  lamsum=0 
+  lamsum2=0
   for band in range(len(self.SUMMED_COLORS)):
    for numk,k in enumerate(structure.allk):
-    waga=el_structure.w0gauss(-ell_structure.ENE_fs[band][k[3]])
- #   h.write(str(ell_structure.ENE_fs[band][k[3]])+'\n')
+    waga=el_structure.w0gauss(-ell_structure.ENE_fs[band][k[3]]) 
     sum_wag+=waga
-    lamsum+=self.SUMMED_COLORS[band][numk]*waga
-  lamsum=lamsum/sum_wag
-#  h.close()
-#  lam=sum([ sum(i) for i in self.SUMMED_COLORS])
+    lamsum+=self.SUMMED_COLORS[band][numk] *waga  #*waga #--done for every q
+    lamsum2+=self.ALL_COLORS[5][band][numk]*waga #/structure.WK[k[3]]  #*waga #--done for every q
+
+  if ell_structure.soc==1: sum_wag=sum_wag/2 #devide by 2 because we are suming not averaging over spin
+  lamsum=lamsum/sum_wag 
+  print(lamsum2/sum_wag)
   print ('summed lambda=',lamsum)
   print ('summed wagi=',sum_wag)
   print('summed lambda from file=',np.sum(np.sum(np.array(self.lambda_from_files_all,dtype=float),axis=1)*phh_structure.multiplicity_of_qs/sum(phh_structure.multiplicity_of_qs)))
   dos=sum_wag/len(structure.allk)
   print ('summed dos=',dos,' 1/Ry = ',dos/13.606,' 1/eV')
  # print ('summed lambda/wagi=',lam/sum_wag/sum(phh_structure.multiplicity_of_qs))
+
+
+  self.SUMMED_COLORS_dense=[] #np.array([[0 for k in range(8*len(structure.allk))] for jband in range(ell_structure.fermi_nbnd_el)])
+  xyz=[np.linspace(0,1,m) for m in structure.no_of_kpoints]
+  for bnd in self.SUMMED_COLORS:
+   bnd2=np.zeros(structure.no_of_kpoints)
+   print(bnd2.shape)
+   print(bnd.shape)
+   m=0
+   for i in range(structure.no_of_kpoints[0]):
+    for j in range(structure.no_of_kpoints[1]):
+     for k in range(structure.no_of_kpoints[2]):
+      bnd2[i][j][k]=bnd[m]
+      m+=1
+
+
+
+   mult=2
+#   bnd2=bnd.reshape(structure.no_of_kpoints)
+   fn = RegularGridInterpolator((xyz[0],xyz[1],xyz[2]), bnd2)
+   nk=np.array(structure.no_of_kpoints)*mult
+   xyz2=[ [i/nk[0],j/nk[1],k/nk[2]] for k in range(nk[2]) for j in range(nk[1]) for i in range(nk[0])]
+   bnd3_interp=fn(xyz2)
+   print((bnd3_interp).shape)
+   self.SUMMED_COLORS_dense.append(bnd3_interp)
+
+  
+  ##save to file
   if self.lambda_or_elph=='elph':
    h=open('elph.frmsf','w')
   else:
@@ -109,12 +160,30 @@ class elph_structure():
    for j in i:
     h.write(str(j)+' ')
    h.write('\n')
-  for bnd in ell_structure.ENE_fs:
-   for k in structure.allk:
+  for bnd in ell_structure.ENE_fs:#_dense:
+   for k in structure.allk:# _dense:
     h.write(str(bnd[k[3]])+'\n')
-  for bnd in self.SUMMED_COLORS:
+  for bnd in self.SUMMED_COLORS: #_dense:
    for k in bnd:
     h.write(str(np.abs(k))+'\n')
   h.close()
 
 
+  ##save to file
+  if self.lambda_or_elph=='elph':
+   h=open('elph.frmsf','w')
+  else:
+   h=open('lambda_dense.frmsf','w')
+  h.write(str(nk[0])+' '+str(nk[1])+' ' +str(nk[2])+'\n')
+  h.write('1\n'+str(len(ell_structure.bands_num))+'\n')
+  for i in structure.e:
+   for j in i:
+    h.write(str(j)+' ')
+   h.write('\n')
+  for bnd in ell_structure.ENE_fs_dense:
+   for k in structure.allk_dense:
+    h.write(str(bnd[k[3]])+'\n')
+  for bnd in self.SUMMED_COLORS_dense:
+   for k in bnd:
+    h.write(str(np.abs(k))+'\n')
+  h.close()

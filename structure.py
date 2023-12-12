@@ -266,6 +266,7 @@ class structure():
   allk2=self.sorting(allk2)
   self.allk=allk2
   #rearrange
+  print(self.no_of_kpoints)
   allk_in_crystal_coordinates=[ allk_in_crystal_coordinates[v[4]]+[v[3],nv] for nv,v in enumerate(self.allk)]
   allk_in_crystal_coordinates=self.sorting(allk_in_crystal_coordinates)
   self.allk_in_crystal_coordinates=self.remove_repeated_items( allk_in_crystal_coordinates )
