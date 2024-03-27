@@ -4,8 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 Ha_to_ev=13.605662285137*2
 hartree2ry=2
-def w0gauss(x):
-  degauss=0.04
+def w0gauss(x,degauss=0.06):
   x2=x/degauss
   sqrtpm1= 1. / 1.77245385090551602729
   sqrt2=2.**0.5
@@ -16,7 +15,8 @@ def w0gauss(x):
   try: arg=min(200/13.606,x2**2)
   except: arg=np.array([min(200/13.606,m**2) for m in x2])
   return exp(-arg)*sqrtpm1/degauss 
-  
+
+
 class el_structure():
  def __init__(self,structure):
   self.ENE_fs=[]
@@ -29,6 +29,142 @@ class el_structure():
   self.prefix=structure.prefix
   self.tmp_dir=structure.tmp_dir
   self.soc=0
+
+ def construct_tetra(self,structure):
+  [nk1,nk2,nk3]= structure.no_of_kpoints
+  self.tetra=[[0 for k in range(6*nk1*nk2*nk3)] for i in range(4)]
+  for i in range(nk1):
+   for j in range(nk2):
+    for k in range(nk3):
+           #  n1-n8 are the indices of k-point 1-8 forming a cube
+      ip1 = (i+1)%nk1 #np.mod(i+1,nk1)
+      jp1 = (j+1)%nk2 #np.mod(j+1,nk2)
+      kp1 = (k+1)%nk3 #np.mod(k+1,nk3)
+      n1 = k   + j  *nk3 + i   *nk2*nk3 
+      n2 = k   + j  *nk3 + ip1 *nk2*nk3 
+      n3 = k   + jp1*nk3 + i   *nk2*nk3 
+      n4 = k   + jp1*nk3 + ip1 *nk2*nk3 
+      n5 = kp1 + j  *nk3 + i   *nk2*nk3 
+      n6 = kp1 + j  *nk3 + ip1 *nk2*nk3 
+      n7 = kp1 + jp1*nk3 + i   *nk2*nk3 
+      n8 = kp1 + jp1*nk3 + ip1 *nk2*nk3 
+           #  there are 6 tetrahedra per cube (and nk1*nk2*nk3 cubes)
+      n  = 6 * ( k + j*nk3 + i*nk3*nk2 )
+      self.tetra [0][n] =n1
+      self.tetra [1][n] = n2
+      self.tetra [2][n] = n3
+      self.tetra [3][n] = n6
+
+      self.tetra [0][n+1] = n2
+      self.tetra [1][n+1] = n3
+      self.tetra [2][n+1] = n4
+      self.tetra [3][n+1] = n6
+
+      self.tetra [0][n+2] = n1
+      self.tetra [1][n+2] = n3
+      self.tetra [2][n+2] = n5
+      self.tetra [3][n+2] = n6
+
+      self.tetra [0][n+3] = n3
+      self.tetra [1][n+3] = n4
+      self.tetra [2][n+3] = n6
+      self.tetra [3][n+3] = n8
+
+      self.tetra [0][n+4] = n3
+      self.tetra [1][n+4] = n6
+      self.tetra [2][n+4] = n7
+      self.tetra [3][n+4] = n8
+
+      self.tetra [0][n+5] = n3
+      self.tetra [1][n+5] = n5
+      self.tetra [2][n+5] = n6
+      self.tetra [3][n+5] = n7
+ 
+ def calc_dos(tetra, gamma,et,ibnd, ef=0):
+  ntetra=len(tetra[0])
+  Tint = 0.0 
+  o13 = 1.0 /3.0 
+  eps  = 1.0e-14
+  voll  = 1.0 /ntetra
+  P1 = 0.0 
+  P2 = 0.0 
+  P3 = 0.0 
+  P4 = 0.0 
+  for nt in range(ntetra):
+      #
+      # etetra are the energies at the vertexes of the nt-th tetrahedron
+      #
+     etetra=[]
+     for i in range(4):
+        etetra.append( et[ibnd][tetra[i][nt]])
+
+     itetra=np.argsort(etetra) #hpsort (4,etetra,itetra)
+     etetra=[ etetra[i] for i in itetra]
+      #
+      # ...sort in ascending order: e1 < e2 < e3 < e4
+      #
+     [e1,e2,e3,e4] = [etetra[0],etetra[1],etetra[2],etetra[3]]
+
+      #
+      # kp1-kp4 are the irreducible k-points corresponding to e1-e4
+      #
+     ik1,ik2,ik3,ik4 = tetra[itetra[0]][nt],tetra[itetra[1]][nt],tetra[itetra[2]][nt],tetra[itetra[3]][nt]
+     Y1,Y2,Y3,Y4  = gamma[ibnd][ik1],gamma[ibnd][ik2],gamma[ibnd][ik3],gamma[ibnd][ik4]
+
+     if( e3 < ef and ef < e4): # THEN
+        f14 = (ef-e4)/(e1-e4)
+        f24 = (ef-e4)/(e2-e4)
+        f34 = (ef-e4)/(e3-e4)
+
+        G  =  3.0  * f14 * f24 * f34 / (e4-ef)
+        P1 =  f14 * o13
+        P2 =  f24 * o13
+        P3 =  f34 * o13
+        P4 =  (3.0  - f14 - f24 - f34 ) * o13
+
+     elif ( e2 < ef and ef < e3 ):
+
+        f13 = (ef-e3)/(e1-e3)
+        f31 = 1.0  - f13
+        f14 = (ef-e4)/(e1-e4)
+        f41 = 1.0 -f14
+        f23 = (ef-e3)/(e2-e3)
+        f32 = 1.0  - f23
+        f24 = (ef-e4)/(e2-e4)
+        f42 = 1.0  - f24
+
+        G   =  3.0  * (f23*f31 + f32*f24)
+        P1  =  f14 * o13 + f13*f31*f23 / G
+        P2  =  f23 * o13 + f24*f24*f32 / G
+        P3  =  f32 * o13 + f31*f31*f23 / G
+        P4  =  f41 * o13 + f42*f24*f32 / G
+        G   =  G / (e4-e1)
+
+     elif ( e1 < ef and ef < e2 ) :
+
+        f12 = (ef-e2)/(e1-e2)
+        f21 = 1.0  - f12
+        f13 = (ef-e3)/(e1-e3)
+        f31 = 1.0  - f13
+        f14 = (ef-e4)/(e1-e4)
+        f41 = 1.0  - f14
+
+        G  =  3.0  * f21 * f31 * f41 / (ef-e1)
+        P1 =  o13 * (f12 + f13 + f14)
+        P2 =  o13 * f21
+        P3 =  o13 * f31
+        P4 =  o13 * f41
+
+     else:
+
+        G = 0.0 
+
+     Tint = Tint + G * (Y1*P1 + Y2*P2 + Y3*P3 + Y4*P4) 
+
+  dos_gam = Tint* voll
+
+  return dos_gam  # #2 because DOS_ee is per 1 spin
+
 
  def find_ef(self):
   print('find EF for chosen degauss')
@@ -115,6 +251,8 @@ class el_structure():
     DOS.append([E,np.sum( [ w0gauss(E-np.array(band)*np.array(structure.WK)) for band in self.ENE])])
   h=open('eldos.dat','w')
   for i in DOS:
+
+    
    h.write("{:.4} {:.6}\n".format(*i))
 
 
@@ -145,3 +283,5 @@ class el_structure():
     if len(WK)==nk_dense: break
   nk_dense=[int(m) for m in tmp[4+nl+nl2+nl3]]  
   return KPOINTS,WK,nk_dense
+ 
+

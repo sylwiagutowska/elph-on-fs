@@ -5,6 +5,9 @@ import numpy as np
 from operator import itemgetter
 import glob
 
+from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import interpn
+
 class structure():
  def __init__(self):
   self.allk=[]
@@ -266,7 +269,6 @@ class structure():
   allk2=self.sorting(allk2)
   self.allk=allk2
   #rearrange
-  print(self.no_of_kpoints)
   allk_in_crystal_coordinates=[ allk_in_crystal_coordinates[v[4]]+[v[3],nv] for nv,v in enumerate(self.allk)]
   allk_in_crystal_coordinates=self.sorting(allk_in_crystal_coordinates)
   self.allk_in_crystal_coordinates=self.remove_repeated_items( allk_in_crystal_coordinates )
@@ -333,7 +335,7 @@ class structure():
   einv=np.linalg.inv(np.transpose(self.e))
   q2=np.round(q_cryst,PRECIS) #transform from cartesian to crystal coordinates, then we have a cube of points 
   for i in range(3):
-      while q2[i]>=1: q2[i]=q2[i]-1
+      while q2[i]>=1: q2[i]=q2[i]-1 
       while q2[i]<0: q2[i]=q2[i]+1
   q1=np.round(q2,PRECIS-1)
   q2=np.round(q2,PRECIS-2)
@@ -355,7 +357,7 @@ class structure():
   self.FRACTIONAL_TRANSLATION_k=[self.FRACTIONAL_TRANSLATION_k[si] for si in founded]
   self.FRACTIONAL_TRANSLATION_r=[self.FRACTIONAL_TRANSLATION_r[si] for si in founded]
 
- def find_k_plus_q(self,k,allk,allk_cryst,q_cryst):
+ def find_k_plus_q(self,k,allk_cryst,q_cryst):
  # print(allk_cryst)
   kpq_no=-2
   #einv=np.linalg.inv(np.transpose(self.e))
@@ -393,3 +395,53 @@ class structure():
    self.allk_in_crystal_coordinates[nk].append(old_allk[nk][3])
    self.NONEQ[k[3]][4]=old_allk[nk][3]
    self.NONEQ_cryst[k[3]][4]=old_allk[nk][3]
+
+
+ def interpolate_data(self,DATA):
+  DATA_dense=[]
+  xyz=[np.linspace(0,1,m) for m in self.no_of_kpoints]
+  for bnd in DATA:
+   bnd2=np.zeros(self.no_of_kpoints,dtype=complex) 
+   m=0
+   for i in range(self.no_of_kpoints[0]):
+    for j in range(self.no_of_kpoints[1]):
+     for k in range(self.no_of_kpoints[2]):
+      bnd2[i][j][k]=bnd[m]
+      m+=1
+
+   mult=2
+#   bnd2=bnd.reshape(structure.no_of_kpoints)
+   fn = RegularGridInterpolator((xyz[0],xyz[1],xyz[2]), bnd2)
+   nk=np.array(self.no_of_kpoints)*mult
+   xyz2=[ [i/nk[0],j/nk[1],k/nk[2]] for k in range(nk[2]) for j in range(nk[1]) for i in range(nk[0])]
+   bnd3_interp=fn(xyz2)
+   #print((bnd3_interp).shape)
+   DATA_dense.append(bnd3_interp)
+  return np.array(DATA_dense)
+
+ def find_noneq(self):
+    self.NONEQ_cryst=[]
+    self.NONEQ_cryst2=[]
+
+    self.WK=[]
+  #  print('std',len(self.allk_in_crystal_coordinates[0]))
+    for nq,q in enumerate(self.allk_in_crystal_coordinates):
+      q2=np.array(np.multiply(q[:3],self.no_of_kpoints),dtype=int)
+      for sym in self.SYMM_crystal:
+        x=np.round(np.dot(np.transpose(sym),q2[:3]))
+        for m in range(3):
+          while x[m]<0: x[m]+=self.no_of_kpoints[m]
+          while x[m]>self.no_of_kpoints[m]: x[m]-=self.no_of_kpoints[m]
+      for nq3,q3 in enumerate(self.NONEQ_cryst2):
+     #   print(x,q3)
+        if x[0]==q3[0] and x[1]==q3[1] and x[2]==q3[2]: 
+          self.allk_in_crystal_coordinates[nq]=q+[nq3]
+          self.WK[nq3]+=1
+      if len(self.allk_in_crystal_coordinates[nq])==4: 
+        q3=list(q2/self.no_of_kpoints)+[len(self.NONEQ_cryst)]
+        self.allk_in_crystal_coordinates[nq]=q+[len(self.NONEQ_cryst)]
+        self.NONEQ_cryst.append(q3)
+        self.NONEQ_cryst2.append(q2)
+        self.WK.append(1)
+    for i in self.allk_in_crystal_coordinates: i=i[:3]+[i[4]]+[i[3]]
+    print('find noneq',len(self.NONEQ_cryst))

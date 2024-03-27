@@ -10,7 +10,7 @@ import copy
 
  
 ELECTRONMASS_SI  = 9.10938215e-31   # Kg
-AMU_SI           = 1.660538782e-27  #Kg
+AMU_SI           = 1.660538782e-27   #Kg
 AMU_AU           = AMU_SI / ELECTRONMASS_SI
 AMU_RY           = AMU_AU / 2. #=911.44 
 RY_TO_THZ=3289.8449
@@ -41,7 +41,8 @@ el_structure.read_el_structure()
 #el_structure.calc_dos(sstructure)
 #el_structure.find_ef()
 #exit()
-
+#print("Cześć świecie")
+#print("Sylwia: Cześć Michał, bardziej dobrze po polsku")
 KPOINTS,WK,nk_dense=el_structure.read_dense_ene()
 #el_structure.find_ef()
 structure_dense=copy.deepcopy(sstructure)
@@ -49,9 +50,12 @@ structure_dense.NONEQ=KPOINTS
 structure_dense.calc_noneq_cryst()
 structure_dense.no_of_kpoints=nk_dense
 structure_dense.make_kgrid()
+sstructure.NONEQ_dense=KPOINTS
+sstructure.NONEQ_cryst_dense=structure_dense.NONEQ_cryst
 sstructure.allk_dense=structure_dense.allk
 sstructure.allk_dense_in_crystal_coordinates=structure_dense.allk_in_crystal_coordinates
-
+#print(sstructure.NONEQ_dense)
+#exit()
 print(len(sstructure.allk_dense),el_structure.ENE_fs_dense.shape)
 #print(structure_dense.allk_in_crystal_coordinates)
 phh_structure=ph_structure.ph_structure(sstructure)
@@ -71,7 +75,7 @@ basic_structure=sstructure
 #pb_mass=207.2 #*(9.3975038) #**2
 #pbbi_mass=207.2 #*6.6485187 #**2
 amass=np.array(basic_structure.at_masses)*AMU_RY #[pbbi_mass,pbbi_mass]
-print(amass)
+print('atomic masses',amass)
 
 #print(phh_structure.Q_crystal)
 #sstructure.calc_irt()
@@ -85,7 +89,7 @@ for qno in range(len(phh_structure.Q)):
  structure_new.check_symm(phh_structure.Q_crystal[qno],sstructure.NONEQ,phh_structure.no_of_s_q[qno],qno)
  structure_new.calc_irt()
 #print(len(structure_new.SYMM))
-# print(phh_structure.DYN2[qno],np.sum(phh_structure.DYN2[qno],axis=0))
+# print(phh_structurcd e.DYN2[qno],np.sum(phh_structure.DYN2[qno],axis=0))
 
 
  dyn=ph_structure.symmetrize(phh_structure.nat,np.array(phh_structure.PATT[qno]),
@@ -95,7 +99,9 @@ for qno in range(len(phh_structure.Q)):
 
  # print(round_complex(dyn)) ###now the dyn shoud be equal to this in  prefix.dyn$i file
  
- 
+ dyn=dyn.transpose()
+
+
  for i in range(3):
   for na in range(phh_structure.nat):
    mu=3*(na)+i
@@ -104,7 +110,6 @@ for qno in range(len(phh_structure.Q)):
      nu=3*(nb)+j
      dyn [mu][nu] = dyn [mu][nu] / ( amass[na]*amass[nb])**0.5
  
-
  a=np.linalg.eig(dyn)
  dyn=a[1]
  prevfreq=phh_structure.FREQ[qno]
@@ -112,17 +117,17 @@ for qno in range(len(phh_structure.Q)):
  for ni,i in enumerate(a[0]):
   if i<0: phh_structure.FREQ[qno][ni]=0 #-phh_structure.FREQ[qno][ni]
  
- 
  #exit()
+
  #now we are calculating the normal modes
  for nu in range(3*phh_structure.nat):
         for mu in range(3*phh_structure.nat):
-         ma=int(mu/3)
+         na=int(nu/3)
   #       print(amass[na]**.5)
          dyn[mu][nu]= dyn[mu][nu] /   ((amass[na])**.5)
  
  
- phh_structure.DYN[qno]=[(dyn)]
+ phh_structure.DYN[qno]=[dyn] #[np.transpose(dyn)]
  '''
  print(qno,dyn)
  for i in range(3):
@@ -166,6 +171,8 @@ for ni,i in enumerate(jedynki):
   if ni!=0: print(phh_structure.FREQ[qno])
  # print(phh_structure.FREQ[ni])
 #print(sstructure.e)
+
+
 #exit()
 
 
@@ -180,7 +187,7 @@ for q in range(1,len(ph_structure.Q)+1):
                 ph_structure,el_structure,'lambda')  #'lambda' or 'elph'
 elph_structure.sum_over_q(ph_structure,structure,el_structure)
 '''
-elphh_structure.parallel_job(sstructure,el_structure,phh_structure)
+elphh_structure.parallel_job(sstructure,structure_dense,el_structure,phh_structure)
 #elphh_structure.single_job([26,sstructure,phh_structure,el_structure,'lambda'])
 elphh_structure.sum_over_q(phh_structure,sstructure,el_structure)
 #elphh_structure.extrapolate_values(sstructure,el_structure)
